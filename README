@@ -1,0 +1,12 @@
+PersistentHashMap implements Map interface and adds two additional operations to it.
+reread() - reads a hash map from a file.
+flush() - saves a hash map to a file.
+
+All operations are thread safe.
+
+Basic use case:
+def map = new PersistentHashMap(file)
+map['key'] = 'value'
+map.flush()
+
+It uses objectStream under the hood. As a result all the objects must implement Serializable to be saved.
