@@ -83,4 +83,19 @@ class PersistentHashMapSpec extends Specification{
 		then: 'records should be there'
 		!map2.containsKey('key1')
 	}
+
+	def 'should throw an exception if files was changed by external process'(){
+		setup:
+		def map1 = new PersistentHashMap(file)
+		def map2 = new PersistentHashMap(file)
+		map2['external_key'] = 'value'
+		map2.flush()
+
+		when:
+		map1['key'] = 'value'
+		map1.flush()
+
+		then:
+		thrown(PersistentHashMapException)
+	}
 }

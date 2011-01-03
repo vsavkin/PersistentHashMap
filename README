@@ -10,3 +10,5 @@ map['key'] = 'value'
 map.flush()
 
 It uses objectStream under the hood. As a result all the objects must implement Serializable to be saved.
+
+If an external process changes the file flush will throw an exception.
