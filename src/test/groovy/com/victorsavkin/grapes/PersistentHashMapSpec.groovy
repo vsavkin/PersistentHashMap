@@ -1,6 +1,8 @@
 package com.victorsavkin.grapes
 
 import spock.lang.Specification
+import com.victorsavkin.grapes.conflict.OverrideConflictResolver
+import com.victorsavkin.grapes.conflict.RejectConflictResolver
 
 class PersistentHashMapSpec extends Specification{
 	File file
@@ -35,7 +37,7 @@ class PersistentHashMapSpec extends Specification{
 		map.size() == 1
 	}
 
-	def 'should flush state to a file after flushing'(){
+	def 'should save state to the file after flushing'(){
 		setup:
 		def map1 = new PersistentHashMap(file)
 		map1['key'] = 'value'
@@ -49,7 +51,7 @@ class PersistentHashMapSpec extends Specification{
 		map2['key'] == 'value'
 	}
 
-	def 'should reread the state from a file'(){
+	def 'should reread the state from the file'(){
 		setup:
 		def map1 = new PersistentHashMap(file)
 		def map2 = new PersistentHashMap(file)
@@ -68,7 +70,7 @@ class PersistentHashMapSpec extends Specification{
 		map2['key'] == 'value'
 	}
 
-	def 'should delete a record from a file'(){
+	def 'should delete a record from the file'(){
 		setup:
 		def map1 = new PersistentHashMap(file)
 		map1['key'] = 'value'
@@ -84,9 +86,9 @@ class PersistentHashMapSpec extends Specification{
 		!map2.containsKey('key1')
 	}
 
-	def 'should throw an exception if files was changed by external process'(){
+	def 'should throw an exception if the file was changed by an external process'(){
 		setup:
-		def map1 = new PersistentHashMap(file)
+		def map1 = new PersistentHashMap(file, new RejectConflictResolver())
 		def map2 = new PersistentHashMap(file)
 		map2['external_key'] = 'value'
 		map2.flush()
@@ -97,5 +99,25 @@ class PersistentHashMapSpec extends Specification{
 
 		then:
 		thrown(PersistentHashMapException)
+	}
+
+	def 'should override the file ignoring all external changes'(){
+		setup:
+		def map1 = new PersistentHashMap(file, new OverrideConflictResolver())
+		def map2 = new PersistentHashMap(file)
+		map2['external_key'] = 'value'
+		map2.flush()
+
+		when:
+		map1['key'] = 'value'
+		map1.flush()
+
+		then:
+		map1.size() == 1
+		map1['key'] == 'value'
+
+		map2.reread()
+		!map2.containsKey('external_key')
+		map2['key'] == 'value'
 	}
 }

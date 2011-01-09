@@ -1,7 +1,9 @@
 package com.victorsavkin.grapes
 
 import java.util.concurrent.ConcurrentHashMap
-import java.security.MessageDigest
+
+import com.victorsavkin.grapes.conflict.RejectConflictResolver
+import com.victorsavkin.grapes.conflict.ConflictResolver
 
 /**
  * PersistentHashMap implements Map interface and adds two additional operations to it.
@@ -21,67 +23,79 @@ import java.security.MessageDigest
  * If an external process changes the file flush will throw an exception.
  */
 class PersistentHashMap<K, V> {
-	private fileLock
-	private fileState
-	private md5
+	private FileExt fileExt
+	private conflictResolver
+	private shapshot
+	
 	@Delegate private Map<K, V> map = new ConcurrentHashMap<K, V>()
 
-	PersistentHashMap(File file) {
-		this.fileLock = new FileLock(file: file)
-		this.fileState = new FileState(file: file)
+	PersistentHashMap(File file, ConflictResolver resolver = new RejectConflictResolver()) {
+		this.fileExt = new FileExt(file: file)
+		this.conflictResolver = resolver
 		reread()
 	}
 
-	PersistentHashMap(String file) {
+	PersistentHashMap(String file, ConflictResolver resolver = new RejectConflictResolver()) {
 		this(new File(file))
 	}
 
 	synchronized void flush() {
-		if (isFileStateChanged())
-			throw new PersistentHashMapException()
-
-		fileLock.withLock {file ->
-			file.withObjectOutputStream {stream ->
-				this.each {k, v ->
-					stream << new FileStoreEntry(key: k, value: v)
-				}
+		withLock {
+			if (isStateChangedSinceLastRead()){
+				resolveConflict()
 			}
-			saveFileState()
+			writeMap()
 		}
 	}
 
 	synchronized void reread() {
-		fileLock.withLock {file ->
-			this.clear()
-			try {
-				file.withObjectInputStream { stream ->
-					stream.eachObject {
-						this[it.key] = it.value
-					}
-				}
-			} catch (EOFException e) {
-				createFileIfItDoesntExist(file)
-			} catch (FileNotFoundException e) {
-				createFileIfItDoesntExist(file)
-			}
-			saveFileState()
+		withLock {
+			readMap()
 		}
 	}
 
-	private isFileStateChanged(){
-		fileState.isStateChanged()
+	void withLock(Closure c){
+		fileExt.withLock c
 	}
 
-	private saveFileState(){
-		fileState.saveState()
+
+	//--helper methods
+	private writeMap(){
+		fileExt.withObjectOutputStream {stream ->
+			this.each {k, v ->
+				stream << new FileStoreEntry(key: k, value: v)
+			}
+		}
+		this.shapshot = clone(map)
 	}
 
-	private createFileIfItDoesntExist(file) {
-		file.withObjectOutputStream { }
+	private readMap(){
+		map = returnMapFromFile()
+		this.shapshot = clone(map)
 	}
-}
 
-class FileStoreEntry implements Serializable {
-	def key
-	def value
+	private returnMapFromFile(){
+		def map = new ConcurrentHashMap()
+		fileExt.withObjectInputStream {stream ->
+			stream.eachObject {FileStoreEntry e->
+				map[e.key] = e.value
+			}
+		}
+		map
+	}
+
+	private clone(map){
+		def clonedMap = [:] as HashMap
+		map.each{k,v->
+			clonedMap[k] = v
+		}
+		clonedMap
+	}
+
+	private resolveConflict(){
+		def original = shapshot
+		def mine = map
+		def theirs = returnMapFromFile()
+		map = conflictResolver.resolve(original, mine, theirs)
+	}
 }
