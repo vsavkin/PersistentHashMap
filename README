@@ -12,3 +12,6 @@ map.flush()
 It uses objectStream under the hood. As a result all the objects must implement Serializable to be saved.
 
 If an external process changes the file flush will throw an exception.
+
+For more information:
+http://vsavkin.tumblr.com/post/2765543454/persistenthashmap-in-groovy
